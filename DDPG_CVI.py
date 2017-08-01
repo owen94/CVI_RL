@@ -23,7 +23,7 @@ CRITIC_LEARNING_RATE = 0.001
 # Discount factor
 GAMMA = 0.99
 # Soft target update param
-TAU = 0.001
+TAU = 0.01
 
 # ===========================
 #   Utility Parameters
@@ -33,11 +33,13 @@ RENDER_ENV = True
 # Use Gym Monitor
 GYM_MONITOR_EN = True
 # Gym environment
-ENV_NAME = 'MountainCarContinuous-v0'
+#ENV_NAME = 'MountainCarContinuous-v0'
+#ENV_NAME = 'LunarLanderContinuous-v2'
+ENV_NAME ='Pendulum-v0'
 # Directory for storing gym results
-MONITOR_DIR = './results/gym_ddpg'
+MONITOR_DIR = './results/gym_pendu'
 # Directory for storing tensorboard summary results
-SUMMARY_DIR = './results/tf_ddpg'
+SUMMARY_DIR = './results/tf_pendu'
 RANDOM_SEED = 1234
 # Size of replay buffer
 BUFFER_SIZE = 1000000
@@ -108,6 +110,8 @@ class ActorNetwork(object):
 
         self.num_trainable_vars = len(self.mean_params) + len(self.variance_params) + len(self.target_network_params)
 
+        self.sess.run(tf.global_variables_initializer())
+
     def create_actor_network(self):
         inputs = tflearn.input_data(shape=[None, self.s_dim])
         net = tflearn.fully_connected(inputs, 400, activation='relu')
@@ -126,14 +130,17 @@ class ActorNetwork(object):
         state_inputs = tf.placeholder(dtype=tf.float32,shape=(None,self.s_dim),name='input')
 
         w_initializer = tf.random_normal_initializer(mean=0.,stddev=0.3)
-        sigma_initializer = tf.constant_initializer(value=10)
+        sigma_initializer = tf.constant_initializer(value=0.01)
+        w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
         b_initializer = tf.constant_initializer(value=0.1)
         n_layer1 = 400
         n_layer2 = 300
         collection = [scope, tf.GraphKeys.GLOBAL_VARIABLES]
 
-        def build_layer(layer_scope,dim_1,dim_2,input,collections, output_layer):
+        def build_layer(layer_scope,dim_1,dim_2,input,collections, output_layer, w_initializer = w_initializer):
             with tf.variable_scope(layer_scope):
+                if output_layer:
+                    w_initializer = w_init
                 w = tf.get_variable(name='w',shape=(dim_1,dim_2),dtype=tf.float32,
                                  initializer=w_initializer,collections=collections)
                 b = tf.get_variable(name='b',shape=(1, dim_2),dtype=tf.float32,
@@ -329,6 +336,7 @@ def train(sess, env, actor, critic):
     # Initialize replay memory
     replay_buffer = Replay_buffer(BUFFER_SIZE, RANDOM_SEED)
     episode_reward = []
+    episode_q = []
 
     for i in range(MAX_EPISODES):
 
@@ -336,6 +344,7 @@ def train(sess, env, actor, critic):
 
         ep_reward = 0
         ep_ave_max_q = 0
+        ep_ave_q = []
 
         for j in range(MAX_EP_STEPS):
 
@@ -345,6 +354,7 @@ def train(sess, env, actor, critic):
             # Added exploration noise
             a = actor.predict(s[np.newaxis,:])
 
+            #s2, r, terminal, info = env.step(np.clip(a[0], -1.0, 1.0))
             s2, r, terminal, info = env.step(a[0])
 
             # if terminal:
@@ -375,6 +385,7 @@ def train(sess, env, actor, critic):
                     s_batch, a_batch, np.reshape(y_i, (MINIBATCH_SIZE, 1)))
 
                 ep_ave_max_q += np.amax(predicted_q_value)
+                ep_ave_q += [np.mean(predicted_q_value)]
 
                 # Update the actor policy using the sampled gradient
                 a_outs = actor.predict(s_batch)
@@ -399,9 +410,13 @@ def train(sess, env, actor, critic):
                 writer.add_summary(summary_str, i)
                 writer.flush()
 
-                print('Episode {} end with {} steps. Cummulative reward is {}, final step reward is {}.'.format(i, j, int(ep_reward), r))
+                print('Episode {} end with {} steps. Cummulative reward is {}, final step reward is {}. Average episode '
+                      'q_value is {}, cumulative max q_value is {}'
+                      .format(i, j, int(ep_reward), r, np.mean(ep_ave_q), ep_ave_max_q))
+
                 break
         episode_reward += [ep_reward]
+        episode_q += [np.mean(ep_ave_q)]
 
         if i%50 ==0:
             print('Average reward in the first {} episodes is {}.'.format(i, np.mean(np.array(episode_reward))))
@@ -410,7 +425,14 @@ def train(sess, env, actor, critic):
             plt.plot(episode_reward)
             plt.xlabel('Episode')
             plt.ylabel('Rewards')
-            plt.savefig('MountainCar')
+            plt.savefig('pendu_100')
+            plt.pause(0.01)
+
+        if i % 100 ==0:
+            plt.plot(episode_reward)
+            plt.xlabel('Episode')
+            plt.ylabel('Q-value')
+            plt.savefig('pendu_q_100')
             plt.pause(0.01)
 
 def main(_):
@@ -425,7 +447,7 @@ def main(_):
         action_dim = env.action_space.shape[0]
         action_bound = env.action_space.high
         # Ensure action bound is symmetric
-        assert (env.action_space.high == -env.action_space.low)
+        #assert (env.action_space.high == -env.action_space.low)
 
         actor = ActorNetwork(sess, state_dim, action_dim, action_bound,
                              ACTOR_LEARNING_RATE, TAU)

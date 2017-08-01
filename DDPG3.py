@@ -30,7 +30,9 @@ RENDER_ENV = True
 # Use Gym Monitor
 GYM_MONITOR_EN = True
 # Gym environment
-ENV_NAME = 'LunarLanderContinuous-v2'
+#ENV_NAME = 'LunarLanderContinuous-v2'
+ENV_NAME = 'MountainCarContinuous-v0'
+
 # Directory for storing gym results
 MONITOR_DIR = './results/gym_ddpg'
 # Directory for storing tensorboard summary results
@@ -273,7 +275,8 @@ def train(sess, env, actor, critic):
             #a = actor.predict(np.reshape(s, (1, 3))) + (1. / (1. + i))
             a = actor.predict(s[np.newaxis,:]) + (1. / (1. + i))
             # this clip thing is used for lunar environment specifically.
-            s2, r, terminal, info = env.step(np.clip(a[0], -1.0, 1.0))
+            #s2, r, terminal, info = env.step(np.clip(a[0], -1.0, 1.0))
+            s2, r, terminal, info = env.step(a[0])
 
             # if terminal is True:
             #     r += 100
@@ -343,7 +346,7 @@ def train(sess, env, actor, critic):
             plt.plot(episode_reward)
             plt.xlabel('Episode')
             plt.ylabel('Rewards')
-            plt.savefig('Lunar')
+            plt.savefig('Car')
             plt.pause(0.01)
 
 
