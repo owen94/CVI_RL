@@ -31,12 +31,14 @@ RENDER_ENV = True
 GYM_MONITOR_EN = True
 # Gym environment
 #ENV_NAME = 'LunarLanderContinuous-v2'
-ENV_NAME = 'MountainCarContinuous-v0'
+#ENV_NAME = 'MountainCarContinuous-v0'
+ENV_NAME ='Pendulum-v0'
+
 
 # Directory for storing gym results
-MONITOR_DIR = './results/gym_ddpg'
+MONITOR_DIR = './results/gym_pendu'
 # Directory for storing tensorboard summary results
-SUMMARY_DIR = './results/tf_ddpg'
+SUMMARY_DIR = './results/tf_pendu'
 RANDOM_SEED = 1234
 # Size of replay buffer
 BUFFER_SIZE = 1000000
