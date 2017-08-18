@@ -12,11 +12,11 @@ tf.set_random_seed(1)
 class DQN(object):
     def __init__(self, state_dim,
                  n_actions,
-                 memory_size=200000,
-                 batch_size=32,
-                 reward_decay=0.9,
+                 memory_size=1000000,
+                 batch_size=64,
+                 reward_decay=0.99,
                  replace_target_steps=1000,
-                 learning_rate = 0.01,
+                 learning_rate = 0.001,
                  epsilon=0.9,
                  show_tensorboard=False,
                  e_greedy_increment=None
@@ -80,7 +80,7 @@ class DQN(object):
             self.r = tf.placeholder(tf.float32, [None, ], name='r')
             self.a = tf.placeholder(tf.int32, [None, ], name='a')
 
-        n_layer_1 = 20
+        n_layer_1 = 100
         w_initializer = tf.random_normal_initializer(mean=0.,stddev=0.3)
         b_initializer = tf.constant_initializer(value=0.1)
 
@@ -144,8 +144,6 @@ class DQN(object):
 
         self.epsilon = self.epsilon + self.epsilon_increment if self.epsilon < self.epsilon_max else self.epsilon_max
 
-
-
     def update_target_net(self):
         t_params = tf.get_collection('target_net_params')
         e_params = tf.get_collection('eval_net_params')
@@ -187,7 +185,7 @@ class DQN(object):
 
 if __name__ == '__main__':
 
-    env_name = 'MountainCar-v0'
+    env_name = 'CartPole-v0'
     env = gym.make(env_name)
     env.seed(1)
 
@@ -210,8 +208,6 @@ if __name__ == '__main__':
             env.render()
             action = DQN.choose_action(state=state[np.newaxis,:])
             next_state, reward, done, _ = env.step(action)
-            if done:
-                reward += 100
             DQN.store_transitions(eval_s= state,a=action,r=reward,target_s=next_state)
             state = next_state
 
@@ -220,8 +216,8 @@ if __name__ == '__main__':
             if done:
                 print('The game in episode {} finished with {} timesteps.'.format(i_episode, steps ))
                 episode_reward += [steps]
-                if steps < 199:
-                    print('The reward is when hit the flag is {}'.format(reward))
+                # if steps < 199:
+                #     print('The reward is when hit the flag is {}'.format(reward))
                 break
             steps += 1
 
@@ -229,7 +225,7 @@ if __name__ == '__main__':
             plt.plot(episode_reward)
             plt.xlabel('Episode')
             plt.ylabel('Steps for success')
-            plt.savefig('mountain-car')
+            plt.savefig('Cartpole')
             plt.pause(3)
 
 

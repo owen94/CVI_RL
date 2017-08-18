@@ -9,7 +9,7 @@ from baselines import logger
 from baselines.common.mpi_adam import MpiAdam
 import baselines.common.tf_util as U
 from baselines.common.mpi_running_mean_std import RunningMeanStd
-from baselines.ddpg.util import reduce_std, mpi_mean
+from util import reduce_std, mpi_mean
 
 
 def normalize(x, stats):

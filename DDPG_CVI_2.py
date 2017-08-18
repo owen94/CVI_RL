@@ -1,5 +1,8 @@
 '''
 This file will implement the DDPG and inject parameter space noise.
+1:  add the tf.train.saver() here to save the models
+2:  change the print format to
+
 '''
 
 import tensorflow as tf
@@ -9,6 +12,9 @@ from gym import wrappers
 from Replay_buffer import Replay_buffer
 import tflearn
 import matplotlib.pyplot as plt
+from baselines import logger
+
+
 # ==========================
 #   Training Parameters
 # ==========================
@@ -34,12 +40,12 @@ RENDER_ENV = True
 GYM_MONITOR_EN = True
 # Gym environment
 #ENV_NAME = 'MountainCarContinuous-v0'
-ENV_NAME = 'LunarLanderContinuous-v2'
-#ENV_NAME ='Pendulum-v0'
+#ENV_NAME = 'LunarLanderContinuous-v2'
+ENV_NAME ='Pendulum-v0'
 # Directory for storing gym results
-MONITOR_DIR = './results/gym_lunar'
+MONITOR_DIR = './cvi/gym_pendu'
 # Directory for storing tensorboard summary results
-SUMMARY_DIR = './results/tf_lunar'
+SUMMARY_DIR = './cvi/tf_pendu'
 RANDOM_SEED = 1234
 # Size of replay buffer
 BUFFER_SIZE = 1000000
@@ -57,7 +63,7 @@ class ActorNetwork(object):
     The output layer activation is a tanh to keep the action
     between -2 and 2
     """
-    def __init__(self, sess, state_dim, action_dim, action_bound, learning_rate, tau):
+    def __init__(self, sess, state_dim, action_dim, action_bound, learning_rate, tau, initial_epsilon=1e-08):
         self.sess = sess
         self.s_dim = state_dim
         self.a_dim = action_dim
@@ -65,39 +71,23 @@ class ActorNetwork(object):
         self.learning_rate = learning_rate
         self.tau = tau
 
-        #Actor Network
+        # Actor Network
         self.scope1 = 'actor'
         self.scope2 = 'target_actor'
         self.inputs, self.out, self.scaled_out = self.creat_actor_network_cvi(scope=self.scope1)
-        self.network_params = tf.trainable_variables()
+        #self.network_params = tf.trainable_variables()
         self.mean_params = tf.get_collection(self.scope1)
-        print(len(self.network_params))
         self.variance_params = tf.get_collection(self.scope1+'_sigma')
 
-
-
-        # self.inputs, self.out, self.scaled_out = self.create_actor_network()
-        #
-        # self.mean_params = tf.trainable_variables()
-
-
-        # assert len(self.mean_params) == len(self.variance_params)
-        # assert len(self.mean_params) +  len(self.variance_params) == len(self.network_params)
+        assert len(self.mean_params) == len(self.variance_params)
+        assert len(self.mean_params) == 6
 
         # Target Network
         self.target_inputs, self.target_out, self.target_scaled_out = \
             self.creat_actor_network_cvi(scope=self.scope2, target= True)
         self.target_network_params = tf.get_collection(self.scope2)
 
-        # self.target_inputs, self.target_out, self.target_scaled_out = self.create_actor_network()
-        # self.target_network_params = tf.trainable_variables()[
-        #     len(self.mean_params):]
-
-
         assert len(self.target_network_params) == len(self.mean_params)
-        assert self.target_network_params[0].shape == self.mean_params[0].shape
-        assert self.target_network_params[2].shape == self.mean_params[2].shape
-
         # Op for periodically updating target network with online network
         # weights
         self.update_target_network_params = \
@@ -106,6 +96,9 @@ class ActorNetwork(object):
                 for i in range(len(self.target_network_params))]
 
         # This gradient will be provided by the critic network
+
+        self.initial_epsilon = initial_epsilon
+
         self.action_gradient = tf.placeholder(tf.float32, [None, self.a_dim])
 
         # Combine the gradients w.r.t the mean parameters first, the
@@ -115,37 +108,35 @@ class ActorNetwork(object):
         self.mean_grads = tf.gradients(
             self.scaled_out, self.mean_params, -self.action_gradient)
 
+
+        # turn off the variance for sanity check.
+        self.variance_grads = tf.gradients(self.scaled_out, self.variance_params, -self.action_gradient)
+        self.optimize_variance = tf.train.AdamOptimizer(self.learning_rate).\
+            apply_gradients(zip(self.variance_grads, self.variance_params))
+        # self.optimize = tf.train.AdamOptimizer(self.learning_rate).\
+        #     apply_gradients(zip(self.mean_grads, self.mean_params))
+
         ####################################
         ##############CVI Update ###########
         ####################################
+        self.variance_grads = [ - tf.square(self.mean_grads[i]) for i in range(len(self.mean_grads))]
+        #self.variance_grads = self.mean_grads
+        self.optimize_variance = tf.train.GradientDescentOptimizer(self.learning_rate).\
+            apply_gradients(zip(self.variance_grads, self.variance_params))
 
-        # self.variance_grads = [- tf.square(self.mean_grads[i]) for i in range(len(self.mean_grads))]
-        # # self.variance_grads = self.mean_grads
-        # self.optimize_variance = tf.train.GradientDescentOptimizer(self.learning_rate).\
-        #     apply_gradients(zip(self.variance_grads, self.variance_params))
-        #
-        # # collection contains all the variance parameters
-        # # since we take the reciprocal of a here, we need to add a small value to a since a can be zero sometime.
-        # inverse_var_params = [1/a for a in self.variance_params]
-        # self.natural_grads = [tf.multiply(a, b) for a, b in zip(inverse_var_params,self.mean_grads)]
-        # self.optimize = tf.train.GradientDescentOptimizer(self.learning_rate).\
-        #     apply_gradients(zip(self.natural_grads, self.mean_params))
+        # collection contains all the variance parameters
+        # since we take the reciprocal of a here, we need to add a small value to a since a can be zero sometime.
 
+        inverse_var_params = [1/a for a in self.variance_params]
+        self.natural_grads = [ tf.multiply(a, b) for a, b in zip(inverse_var_params,self.mean_grads)]
+        self.optimize = tf.train.GradientDescentOptimizer(self.learning_rate).\
+            apply_gradients(zip(self.natural_grads, self.mean_params))
 
-        # turn off the variance for sanity check.
-        self.optimize = tf.train.AdamOptimizer(self.learning_rate).\
-            apply_gradients(zip(self.mean_grads, self.mean_params))
 
         self.num_trainable_vars = len(self.mean_params) + len(self.variance_params) + \
                                   len(self.target_network_params)
 
-        # self.num_trainable_vars = len(self.mean_params)  + \
-        #                           len(self.target_network_params)
-
         self.sess.run(tf.global_variables_initializer())
-
-
-       ##############################################################################################################
 
     def create_actor_network(self):
         inputs = tflearn.input_data(shape=[None, self.s_dim])
@@ -164,46 +155,48 @@ class ActorNetwork(object):
 
         state_inputs = tf.placeholder(dtype=tf.float32,shape=(None,self.s_dim),name='input')
 
-        #w_initializer = tf.random_normal_initializer(mean=0.,stddev=0.3)
-        sigma_initializer = tf.constant_initializer(value=0.1)
-        w_initial = tflearn.initializations.truncated_normal()
+        # the truncated initializer is the one used in fully_connected network
+        w_initializer = tf.random_normal_initializer(mean=0.,stddev=0.3)
+        #w_initializer = tflearn.initializations.truncated_normal()
+        sigma_initializer = tf.constant_initializer(value=10000)
         w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
-        b_initializer = tf.constant_initializer(value=0.)
+        b_initializer = tf.constant_initializer(value=0.1)
         n_layer1 = 400
         n_layer2 = 300
         collection = [scope, tf.GraphKeys.GLOBAL_VARIABLES]
+        #logger.info('create actor network with truncated_normal...')
 
-        def build_layer(layer_scope,dim_1,dim_2,input,collections, output_layer, w_initializer = w_initial):
+        def build_layer(layer_scope,dim_1,dim_2,input,collections, output_layer, w_initializer = w_initializer):
             with tf.variable_scope(layer_scope):
                 if output_layer:
                     w_initializer = w_init
-                w = tf.get_variable(name='w',shape=[dim_1,dim_2],dtype=tf.float32,
+                w = tf.get_variable(name='w',shape=(dim_1,dim_2),dtype=tf.float32,
                                  initializer=w_initializer,collections=collections)
-                b = tf.get_variable(name='b',shape=[dim_2,],dtype=tf.float32,
+                b = tf.get_variable(name='b',shape=(1, dim_2),dtype=tf.float32,
                                  initializer= b_initializer, collections=collections)
                 if not target:
-                    #eps_w = tf.random_normal(shape=(dim_1,dim_2), mean=0, stddev=1, dtype=tf.float32)
-                    eps_w = 0
+                    eps_w = tf.random_normal(shape=(dim_1,dim_2), mean=0, stddev=1, dtype=tf.float32)
+                    #eps_w = 0
                     sigma_w = tf.get_variable(name='sigma_w',shape=(dim_1,dim_2),dtype=tf.float32,
                                  initializer=sigma_initializer,collections=[scope+'_sigma', tf.GraphKeys.GLOBAL_VARIABLES])
-                    #noisy_w = w + eps_w * (1/tf.sqrt(sigma_w))
+                    noisy_w = w + eps_w * (1/tf.sqrt(sigma_w))
 
-                    #eps_b = tf.random_normal(shape=(1,dim_2), mean=0, stddev=1,dtype=tf.float32)
-                    eps_b = 0
+
+                    eps_b = tf.random_normal(shape=(1,dim_2), mean=0, stddev=1,dtype=tf.float32)
+                    #eps_b = 0
                     sigma_b = tf.get_variable(name='sigma_b',shape=(1,dim_2),dtype=tf.float32,
                                  initializer=sigma_initializer,collections=[scope+'_sigma', tf.GraphKeys.GLOBAL_VARIABLES])
-                    #noisy_b = b + eps_b * (1/tf.sqrt(sigma_b))
+                    noisy_b = b + eps_b * (1/tf.sqrt(sigma_b))
 
                     # noisy_w = w
                     # noisy_b = b
-                    #
                     # assert noisy_w == w
                     # assert noisy_b == b
 
                     if output_layer:
-                        layer_output = tf.nn.tanh(tf.matmul(input, w) + b)
+                        layer_output = tf.nn.tanh(tf.matmul(input, noisy_w) + noisy_b)
                     else:
-                        layer_output = tf.nn.relu(tf.matmul(input, w) + b)
+                        layer_output = tf.nn.relu(tf.matmul(input, noisy_w) + noisy_b)
                 else:
                     if output_layer:
                         layer_output = tf.nn.tanh(tf.matmul(input, w) + b)
@@ -226,11 +219,27 @@ class ActorNetwork(object):
         return state_inputs, output, scaled_out
 
 
+
+    def adagrad(self,grad, var, gcc = None):
+
+        if gcc is None:
+            self.gcc = [tf.square(grad[i]) for i in range(len(grad))]
+        else:
+            add_gcc = [tf.square(grad[i]) for i in range(len(grad))]
+            self.gcc = [tf.add(a, b) for a, b in zip(self.gcc, add_gcc)]
+
+        adaptive_grad = [ grad_i / tf.sqrt(tf.add(gcc_i, self.initial_epsilon))
+                         for grad_i, gcc_i in zip(grad, self.gcc)]
+
+        update = [var[i].assign(var[i] - self.learning_rate * adaptive_grad[i]) for i in range(len(var))]
+
+        return update
+
     def train(self, inputs, a_gradient):
-        # self.sess.run(self.optimize_variance, feed_dict={
-        #     self.inputs: inputs,
-        #     self.action_gradient: a_gradient
-        # })
+        self.sess.run(self.optimize_variance, feed_dict={
+            self.inputs: inputs,
+            self.action_gradient: a_gradient
+        })
         self.sess.run(self.optimize, feed_dict={
             self.inputs: inputs,
             self.action_gradient: a_gradient
@@ -397,9 +406,10 @@ def train(sess, env, actor, critic):
                 env.render()
 
             # Added exploration noise
-            a = actor.predict(s[np.newaxis,:]) + (1. / (1. + i))
-            s2, r, terminal, info = env.step(np.clip(a[0], -1.0, 1.0))
-            #s2, r, terminal, info = env.step(a[0])
+            #a = actor.predict(s[np.newaxis,:]) + (1. / (1. + i))
+            a = actor.predict(s[np.newaxis,:])
+            #s2, r, terminal, info = env.step(np.clip(a[0], -1.0, 1.0))
+            s2, r, terminal, info = env.step(a[0])
 
             # if terminal:
             #     r += 100
@@ -469,7 +479,8 @@ def train(sess, env, actor, critic):
             plt.plot(episode_reward)
             plt.xlabel('Episode')
             plt.ylabel('Rewards')
-            plt.savefig('builb_build.png')
+            savepath = '/Users/liuzuozhu/MyGit/Parameter_CVI/cvi/cvi_raw_vargrad_w0.3.png'
+            plt.savefig(savepath)
             plt.pause(0.01)
 
 

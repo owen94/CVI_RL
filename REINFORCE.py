@@ -55,7 +55,7 @@ class REINFORCE(object):
         self.policy_output = self.policy_network(self.states)
         self.all_act_prob = tf.nn.softmax(self.policy_output, name='act_prob')
 
-            #self.action_scores = tf.identity(input=self.policy_output)
+        #self.action_scores = tf.identity(input=self.policy_output)
         # compute the loss and gradients, input is the: sample_action(A_t), reward(G_t), and states
         with tf.name_scope('loss_gradients'):
             # compute the cross entropy loss
