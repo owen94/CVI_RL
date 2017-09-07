@@ -240,18 +240,17 @@ def main(_):
                     writer.add_summary(summary_str, i)
                     writer.flush()
 
-                    print('Episode {} end with {} steps. Cummulative reward is {}, final step reward is {}. Average episode '
-                          'q_value is {}, cumulative max q_value is {}'
-                          .format(i, j, int(ep_reward), r, np.mean(ep_ave_q), ep_ave_max_q))
+                    print('Episode {} end with {} steps. Cummulative reward is {:.4f}, final step reward is {:.4f}. Average episode '
+                          'q_value is {:.4f}, cumulative max q_value is {:.4f}'
+                          .format(i, j, ep_reward, r, np.mean(ep_ave_q), ep_ave_max_q))
 
                     break
 
             episode_reward += [ep_reward]
             episode_q += [np.mean(ep_ave_q)]
 
-            if i%50 ==0:
-                print('Average reward in the first {} episodes is {}.'.format(i, np.mean(np.array(episode_reward))))
-            #
+            if int(i+1) %50 ==0:
+                print('Average reward in the first {} episodes is {:.4f}.'.format(i, np.mean(np.array(episode_reward))))
             # if i % 100 ==0:
             #     plt.plot(episode_reward)
             #     plt.xlabel('Episode')
@@ -263,11 +262,22 @@ def main(_):
                 # plt.savefig(savepath)
                 # plt.pause(0.01)
 
-                path = Result_Path +   '/reward.npy'
+                path = Result_Path + '/reward.npy'
                 #result_path = './cvi/lunar/sgd_0.0001_noise_10000.npy'
                 np.save(path, episode_reward)
 
-        #
+
+                saver = tf.train.Saver()
+                model_path = Result_Path + '/model'
+                saver.save(sess, model_path, global_step=i)
+
+                plt.plot(episode_reward)
+                plt.xlabel('Episode')
+                plt.ylabel('Rewards')
+                plotpath = Result_Path +  'reward.pdf'
+                plt.savefig(plotpath)
+
+
         # if GYM_MONITOR_EN:
         #     env.monitor.close()
 
