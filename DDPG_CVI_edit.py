@@ -174,8 +174,8 @@ def main(_):
 
             for j in range(MAX_EP_STEPS):
 
-                if RENDER_ENV:
-                    env.render()
+                # if RENDER_ENV:
+                #     env.render()
 
                 # TODO: Move this part to actor network so that no noise method add action noise when predict.
                 # Added exploration noise
@@ -276,8 +276,6 @@ def main(_):
                 plt.ylabel('Rewards')
                 plotpath = Result_Path +  'reward.pdf'
                 plt.savefig(plotpath)
-
-
         # if GYM_MONITOR_EN:
         #     env.monitor.close()
 
