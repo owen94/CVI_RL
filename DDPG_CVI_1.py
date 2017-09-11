@@ -105,40 +105,23 @@ class ActorNetwork(object):
         self.gcc = None
         self.initial_epsilon = initial_epsilon
 
-        self.optimize_variance = self.cvi_update_sigma(grad=self.mean_grads,sigma = self.variance_params)
-        self.optimize = self.cvi_update_mean(grad= self.mean_grads,var=self.mean_params, sigma= self.variance_params)
+        #self.optimize_variance = self.cvi_update_sigma(grad=self.mean_grads,sigma = self.variance_params)
+        #self.optimize = self.cvi_update_mean(grad= self.mean_grads,var=self.mean_params, sigma= self.variance_params)
 
-        # turn off the variance for sanity check.
-        # self.variance_grads = tf.gradients(self.scaled_out, self.variance_params, -self.action_gradient)
-        #
-        # self.optimize_variance = tf.train.AdagradOptimizer(learning_rate= 0.01, initial_accumulator_value=1e-8).\
-        #     apply_gradients(zip(self.variance_grads, self.variance_params))
-        # self.optimize = tf.train.GradientDescentOptimizer(learning_rate=0.0001).\
-        #      apply_gradients(zip(self.mean_grads, self.mean_params))
 
-        ####################################
-        ##############CVI Update ###########
-        ####################################
-        #self.variance_grads = [ - tf.square(self.mean_grads[i]) for i in range(len(self.mean_grads))]
-        #self.variance_grads = self.mean_grads
-        # self.optimize_variance = tf.train.GradientDescentOptimizer(self.learning_rate).\
-        #     apply_gradients(zip(self.variance_grads, self.variance_params))
-        #
-        # # collection contains all the variance parameters
-        # # since we take the reciprocal of a here, we need to add a small value to a since a can be zero sometime.
-        #
-        # inverse_var_params = [1/a for a in self.variance_params]
-        # self.natural_grads = [tf.multiply(a, b) for a, b in zip(inverse_var_params,self.mean_grads)]
-        # self.optimize = tf.train.GradientDescentOptimizer(self.learning_rate).\
-        #     apply_gradients(zip(self.natural_grads, self.mean_params))
+
+        self.optimize = tf.train.GradientDescentOptimizer(learning_rate=self.learning_rate).\
+                    apply_gradients(zip(self.mean_grads, self.mean_params))
+
+
         self.num_trainable_vars = len(self.mean_params) + len(self.variance_params) + \
                                   len(self.target_network_params)
 
 
     def create_actor_network(self):
         inputs = tflearn.input_data(shape=[None, self.s_dim])
-        net = tflearn.fully_connected(inputs, 400, activation='relu')
-        net = tflearn.fully_connected(net, 300, activation='relu')
+        net = tflearn.fully_connected(inputs, 64, activation='relu')
+        net = tflearn.fully_connected(net, 64, activation='relu')
         # Final layer weights are init to Uniform[-3e-3, 3e-3]
         w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
         out = tflearn.fully_connected(
@@ -180,7 +163,7 @@ class ActorNetwork(object):
                     eps_b = tf.random_normal(shape=(1,dim_2), mean=0, stddev=1,dtype=tf.float32)
                     sigma_b = tf.get_variable(name='sigma_b',shape=(1,dim_2),dtype=tf.float32,
                                  initializer=sigma_initializer,collections=[scope+'_sigma', tf.GraphKeys.GLOBAL_VARIABLES])
-                    noisy_b = b + ti
+                    noisy_b = b + eps_b * (1/tf.sqrt(sigma_b))
 
                     # noisy_w = w
                     # noisy_b = b
@@ -346,12 +329,12 @@ class CriticNetwork(object):
     def create_critic_network(self):
         inputs = tflearn.input_data(shape=[None, self.s_dim])
         action = tflearn.input_data(shape=[None, self.a_dim])
-        net = tflearn.fully_connected(inputs, 400, activation='relu')
+        net = tflearn.fully_connected(inputs, 64, activation='relu')
 
         # Add the action tensor in the 2nd hidden layer
         # Use two temp layers to get the corresponding weights and biases
-        t1 = tflearn.fully_connected(net, 300)
-        t2 = tflearn.fully_connected(action, 300)
+        t1 = tflearn.fully_connected(net, 64)
+        t2 = tflearn.fully_connected(action, 64)
 
         net = tflearn.activation(
             tf.matmul(net, t1.W) + tf.matmul(action, t2.W) + t2.b, activation='relu')

@@ -173,12 +173,12 @@ class ActorNetwork(object):
                     eps_w = tf.random_normal(shape=(dim_1,dim_2), mean=0, stddev=1, dtype=tf.float32)
                     sigma_w = tf.get_variable(name='sigma_w',shape=(dim_1,dim_2),dtype=tf.float32,
                                  initializer=sigma_initializer,collections=[scope+'_sigma', tf.GraphKeys.GLOBAL_VARIABLES])
-                    noisy_w = w + eps_w * (1/tf.sqrt(sigma_w))
+                    noisy_w = w + 0 * eps_w * (1/tf.sqrt(sigma_w))
 
                     eps_b = tf.random_normal(shape=(1,dim_2), mean=0, stddev=1,dtype=tf.float32)
                     sigma_b = tf.get_variable(name='sigma_b',shape=(1,dim_2),dtype=tf.float32,
                                  initializer=sigma_initializer,collections=[scope+'_sigma', tf.GraphKeys.GLOBAL_VARIABLES])
-                    noisy_b = b + eps_b * (1/tf.sqrt(sigma_b))
+                    noisy_b = b + 0 * eps_b * (1/tf.sqrt(sigma_b))
 
                     # noisy_w = w
                     # noisy_b = b
