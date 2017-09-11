@@ -157,8 +157,8 @@ class ActorNetwork(object):
         sigma_initializer = tf.constant_initializer(value=self.noise)
         w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
         b_initializer = tf.constant_initializer(value=0.1)
-        n_layer1 = 400
-        n_layer2 = 300
+        n_layer1 = 64
+        n_layer2 = 64
         collection = [scope, tf.GraphKeys.GLOBAL_VARIABLES]
 
         def build_layer(layer_scope,dim_1,dim_2,input,collections, output_layer, w_initializer = w_initializer):

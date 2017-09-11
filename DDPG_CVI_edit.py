@@ -246,6 +246,8 @@ def main(_):
 
                     break
 
+            #test policy
+
             episode_reward += [ep_reward]
             episode_q += [np.mean(ep_ave_q)]
 
