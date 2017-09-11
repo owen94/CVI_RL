@@ -243,7 +243,7 @@ class ActorNetwork(object):
         
     def train(self, inputs, a_gradient):
     
-        if "NOISE" in self.method:
+        if "NOISE" in self.method and self.method != "NOISE+SGD+CONS":
             self.sess.run(self.optimize_variance, feed_dict={
                 self.inputs: inputs,
                 self.action_gradient: a_gradient
