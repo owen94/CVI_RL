@@ -92,6 +92,7 @@ class ActorNetwork(object):
                 self.optimize = tf.train.AdamOptimizer(learning_rate=self.learning_rate).\
                     apply_gradients(zip(self.mean_grads, self.mean_params))
         else:
+            print(self.method)
             if METHOD == "SGD":
                 self.optimize = tf.train.GradientDescentOptimizer(learning_rate=self.learning_rate).\
                     apply_gradients(zip(self.mean_grads, self.mean_params))

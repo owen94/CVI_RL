@@ -72,6 +72,7 @@ def main(_):
                     1 : "NOISE+CVI_diag",
                     2 : "NOISE+SGD",
                     3 : "NOISE+ADAM",
+                    4 : "NOISE+SGD+CONS"
     }
     
     ## name of each environment

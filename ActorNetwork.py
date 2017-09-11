@@ -91,6 +91,10 @@ class ActorNetwork(object):
                     apply_gradients(zip(self.variance_grads, self.variance_params))
                 self.optimize = tf.train.AdamOptimizer(learning_rate=self.learning_rate).\
                     apply_gradients(zip(self.mean_grads, self.mean_params))
+
+            elif self.method == "NOISE+SGD+CONS":
+                self.optimize = tf.train.GradientDescentOptimizer(learning_rate=self.learning_rate).\
+                    apply_gradients(zip(self.mean_grads, self.mean_params))
         else:
             if METHOD == "SGD":
                 self.optimize = tf.train.GradientDescentOptimizer(learning_rate=self.learning_rate).\
