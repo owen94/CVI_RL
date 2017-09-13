@@ -267,13 +267,12 @@ def main(_):
                 # model_path = Result_Path + '/model'
                 # saver.save(sess, model_path, global_step=i)
 
-        # if GYM_MONITOR_EN:
-
             if i % TEST_EVERY == 0:
                 actor.update_test_network()
+                print('Testing the actor network.......')
+
                 for T in range(TEST_EPISODES):
                     test_r = 0
-                    print('start evaluating the actor network')
                     test_s = env.reset()
                     for j in range(MAX_EP_STEPS):
                         a = actor.predict_test(test_s[np.newaxis,:])
