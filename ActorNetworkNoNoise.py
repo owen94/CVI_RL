@@ -26,6 +26,7 @@ class ActorNetwork(object):
         # Actor Network
         self.scope1 = 'actor'
         self.scope2 = 'target_actor'
+        self.scope3 = 'test'
         self.inputs, self.out, self.scaled_out = self.creat_actor_network_cvi(scope=self.scope1)
         #self.network_params = tf.trainable_variables()
         self.mean_params = tf.get_collection(self.scope1)
@@ -43,6 +44,12 @@ class ActorNetwork(object):
             self.creat_actor_network_cvi(scope=self.scope2, target= True)
         self.target_network_params = tf.get_collection(self.scope2)
 
+        self.test_inputs, self.test_out, self.test_scaled_out = \
+            self.creat_actor_network_cvi(scope=self.scope3, target= True)
+        self.test_network_params = tf.get_collection(self.scope3)
+
+
+
         assert len(self.target_network_params) == len(self.mean_params)
         # Op for periodically updating target network with online network
         # weights
@@ -50,6 +57,11 @@ class ActorNetwork(object):
             [self.target_network_params[i].assign(tf.multiply(self.mean_params[i], self.tau) +
                                                   tf.multiply(self.target_network_params[i], 1. - self.tau))
                 for i in range(len(self.target_network_params))]
+
+
+        self.update_test_network_params = \
+            [self.test_network_params[i].assign(self.mean_params[i])
+                for i in range(len(self.test_network_params))]
 
         # This gradient will be provided by the critic network
         self.action_gradient = tf.placeholder(tf.float32, [None, self.a_dim])
@@ -67,36 +79,11 @@ class ActorNetwork(object):
 
         # then set appropriate optimizers for each method
         #TODO: make learning rates more unified, i.e., self.learning_rate vs 0.01 and 0.0001 below
-        if "NOISE" in self.method:
-            print(self.method)
-            self.variance_grads = tf.gradients(self.scaled_out, self.variance_params, -self.action_gradient)
-            
-            if self.method == "NOISE+CVI":
-                self.optimize_variance = tf.train.GradientDescentOptimizer(learning_rate= self.beta).\
-                    apply_gradients(zip(self.variance_grads, self.variance_params))
-                self.optimize = self.cvi_update_mean(grad=self.mean_grads,var=self.mean_params, sigma=self.variance_params)
-                
-            if self.method == "NOISE+CVI_diag":  #probably not use ?, keep it for now
-                self.optimize_variance = self.cvi_update_sigma(grad=self.mean_grads,sigma = self.variance_params)
-                self.optimize = self.cvi_update_mean(grad=self.mean_grads,var=self.mean_params, sigma=self.variance_params)
-                
-            elif self.method == "NOISE+SGD":
-                self.optimize_variance = tf.train.GradientDescentOptimizer(learning_rate= self.beta).\
-                    apply_gradients(zip(self.variance_grads, self.variance_params))
-                self.optimize = tf.train.GradientDescentOptimizer(learning_rate=self.learning_rate).\
+
+        if METHOD == "SGD":
+            self.optimize = tf.train.GradientDescentOptimizer(learning_rate=self.learning_rate).\
                     apply_gradients(zip(self.mean_grads, self.mean_params))
-                    
-            elif self.method == "NOISE+ADAM":       
-                self.optimize_variance = tf.train.AdamOptimizer(learning_rate= self.beta).\
-                    apply_gradients(zip(self.variance_grads, self.variance_params))
-                self.optimize = tf.train.AdamOptimizer(learning_rate=self.learning_rate).\
-                    apply_gradients(zip(self.mean_grads, self.mean_params))
-        else:
-            print(self.method)
-            if METHOD == "SGD":
-                self.optimize = tf.train.GradientDescentOptimizer(learning_rate=self.learning_rate).\
-                    apply_gradients(zip(self.mean_grads, self.mean_params))
-            elif METHOD == "ADAM":
+        elif METHOD == "ADAM":
                 self.optimize = tf.train.AdamOptimizer(learning_rate=self.learning_rate).\
                     apply_gradients(zip(self.mean_grads, self.mean_params))
          
@@ -131,13 +118,13 @@ class ActorNetwork(object):
         # self.optimize = tf.train.GradientDescentOptimizer(self.learning_rate).\
         #     apply_gradients(zip(self.natural_grads, self.mean_params))
         self.num_trainable_vars = len(self.mean_params) + len(self.variance_params) + \
-                                  len(self.target_network_params)
+                                  len(self.target_network_params) + len(self.test_network_params)
 
 
     def create_actor_network(self):
         inputs = tflearn.input_data(shape=[None, self.s_dim])
-        net = tflearn.fully_connected(inputs, 64, activation='relu')
-        net = tflearn.fully_connected(net, 64, activation='relu')
+        net = tflearn.fully_connected(inputs, 400, activation='relu')
+        net = tflearn.fully_connected(net, 300, activation='relu')
         # Final layer weights are init to Uniform[-3e-3, 3e-3]
         w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
         out = tflearn.fully_connected(
@@ -158,8 +145,8 @@ class ActorNetwork(object):
         sigma_initializer = tf.constant_initializer(value=self.noise)
         w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
         b_initializer = tf.constant_initializer(value=0.1)
-        n_layer1 = 64
-        n_layer2 = 64
+        n_layer1 = 400
+        n_layer2 = 300
         collection = [scope, tf.GraphKeys.GLOBAL_VARIABLES]
 
         def build_layer(layer_scope,dim_1,dim_2,input,collections, output_layer, w_initializer = w_initializer):
@@ -240,7 +227,7 @@ class ActorNetwork(object):
         
     def train(self, inputs, a_gradient):
     
-        if "NOISE" in self.method:
+        if "NOISE" in self.method and self.method != "NOISE+SGD+CONS":
             self.sess.run(self.optimize_variance, feed_dict={
                 self.inputs: inputs,
                 self.action_gradient: a_gradient
@@ -274,8 +261,16 @@ class ActorNetwork(object):
             self.target_inputs: inputs
         })
 
+    def predict_test(self, inputs):
+        return self.sess.run(self.test_scaled_out, feed_dict={
+            self.test_inputs: inputs
+        })
+
     def update_target_network(self):
         self.sess.run(self.update_target_network_params)
+
+    def update_test_network(self):
+        self.sess.run(self.update_test_network_params)
 
     def get_num_trainable_vars(self):
         return self.num_trainable_vars

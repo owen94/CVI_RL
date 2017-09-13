@@ -107,7 +107,7 @@ def main(_):
     GYM_MONITOR_EN = True
     # Directory for storing gym results
     Result_Path = './result/' + (ENV_NAME) + '/' + METHOD  + '/noise_' + str(NOISE) + '/lr_' + str(ACTOR_LEARNING_RATE) \
-                  + '/beta_' + str(beta)
+                  + '/beta_' + str(beta) + '/seed_' + str(RANDOM_SEED)
 
     if not os.path.exists(Result_Path):
         os.makedirs(Result_Path)
@@ -119,6 +119,8 @@ def main(_):
     # Size of replay buffer
     BUFFER_SIZE = 1000000
     MINIBATCH_SIZE = 64
+    TEST_EPISODES = 20
+    TEST_EVERY = 10
 
 
     # content of train() is move to below to avoid passing many input argument from argparse    
@@ -164,6 +166,8 @@ def main(_):
         replay_buffer = Replay_buffer(BUFFER_SIZE, RANDOM_SEED)
         episode_reward = []
         episode_q = []
+
+        test_reward = np.zeros((MAX_EPISODES//TEST_EVERY,TEST_EPISODES))
 
         for i in range(MAX_EPISODES):
 
@@ -252,34 +256,51 @@ def main(_):
             episode_reward += [ep_reward]
             episode_q += [np.mean(ep_ave_q)]
 
-            if int(i+1) %50 ==0:
+            if int(i+1) %50 == 0:
                 print('Average reward in the first {} episodes is {:.4f}.'.format(i, np.mean(np.array(episode_reward))))
-            # if i % 100 ==0:
-            #     plt.plot(episode_reward)
-            #     plt.xlabel('Episode')
-            #     plt.ylabel('Rewards')
-            #     savepath = './cvi/lunar/cvi_n_' + \
-            #                str(actor.noise) + '_lr_' + str(actor.learning_rate) + '_b_' + str(actor.beta) +  '.png'
 
-                #savepath = './cvi/lunar/sgd_0.0001_noise_10000.png'
-                # plt.savefig(savepath)
-                # plt.pause(0.01)
-
-                path = Result_Path + '/reward.npy'
-                #result_path = './cvi/lunar/sgd_0.0001_noise_10000.npy'
+                path = Result_Path + '/train_reward.npy'
                 np.save(path, episode_reward)
 
+                # save the models or not
+                # saver = tf.train.Saver()
+                # model_path = Result_Path + '/model'
+                # saver.save(sess, model_path, global_step=i)
 
-                saver = tf.train.Saver()
-                model_path = Result_Path + '/model'
-                saver.save(sess, model_path, global_step=i)
-
-                plt.plot(episode_reward)
-                plt.xlabel('Episode')
-                plt.ylabel('Rewards')
-                plotpath = Result_Path +  'reward.pdf'
-                plt.savefig(plotpath)
         # if GYM_MONITOR_EN:
+
+            if i % TEST_EVERY == 0:
+                actor.update_test_network()
+                for T in range(TEST_EPISODES):
+                    test_r = 0
+                    print('start evaluating the actor network')
+                    test_s = env.reset()
+                    for j in range(MAX_EP_STEPS):
+                        a = actor.predict_test(test_s[np.newaxis,:])
+                        [test_s2, r, terminal, info] = env.step(a[0])
+                        test_s = test_s2
+                        test_r += r
+                        if terminal:
+                            break
+                    test_reward[i//TEST_EVERY, T] = test_r
+
+                test_path = Result_Path + '/test_reward.npy'
+                np.save(test_path, test_reward)
+
+        plt.plot(episode_reward)
+        plt.xlabel('Episode')
+        plt.ylabel('Train Rewards')
+        plotpath = Result_Path +  '/train_reward.pdf'
+        plt.savefig(plotpath)
+
+
+        mean_test_reward = np.mean(test_reward, axis=1)
+        plt.plot(mean_test_reward)
+        plt.xlabel('Episode')
+        plt.ylabel('Test Rewards')
+        plotpath = Result_Path +  '/test_reward.pdf'
+        plt.savefig(plotpath)
+
         #     env.monitor.close()
 
 if __name__ == '__main__':
