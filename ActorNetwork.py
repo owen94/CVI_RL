@@ -88,8 +88,8 @@ class ActorNetwork(object):
                     apply_gradients(zip(self.variance_grads, self.variance_params))
                 self.optimize = self.cvi_update_mean(grad=self.mean_grads,var=self.mean_params, sigma=self.variance_params)
                 
-            if self.method == "NOISE+CVI_diag":  #probably not use ?, keep it for now
-                self.optimize_variance = self.cvi_update_sigma(grad=self.mean_grads,sigma = self.variance_params)
+            if self.method == "NOISE+CVI_first":  #probably not use ?, keep it for now
+                self.optimize_variance = self.cvi_update_sigma(grad=self.variance_grads,sigma = self.variance_params)
                 self.optimize = self.cvi_update_mean(grad=self.mean_grads,var=self.mean_params, sigma=self.variance_params)
                 
             elif self.method == "NOISE+SGD":
@@ -115,51 +115,9 @@ class ActorNetwork(object):
                 self.optimize = tf.train.AdamOptimizer(learning_rate=self.learning_rate).\
                     apply_gradients(zip(self.mean_grads, self.mean_params))
          
-         
-        #self.optimize_variance = tf.train.AdagradOptimizer(learning_rate= 0.01, initial_accumulator_value=1e-8).\
-        #    apply_gradients(zip(self.variance_grads, self.variance_params))
-              
-        #self.optimize_variance = self.cvi_update_sigma(grad=self.mean_grads,sigma = self.variance_params)
-        #self.optimize = self.cvi_update_mean(grad= self.mean_grads,var=self.mean_params, sigma= self.variance_params)
 
-        # turn off the variance for sanity check.
-        # self.variance_grads = tf.gradients(self.scaled_out, self.variance_params, -self.action_gradient)
-        #
-        # self.optimize_variance = tf.train.AdagradOptimizer(learning_rate= 0.01, initial_accumulator_value=1e-8).\
-        #     apply_gradients(zip(self.variance_grads, self.variance_params))
-        # self.optimize = tf.train.GradientDescentOptimizer(learning_rate=0.0001).\
-        #      apply_gradients(zip(self.mean_grads, self.mean_params))
-
-        ####################################
-        ##############CVI Update ###########
-        ####################################
-        #self.variance_grads = [ - tf.square(self.mean_grads[i]) for i in range(len(self.mean_grads))]
-        #self.variance_grads = self.mean_grads
-        # self.optimize_variance = tf.train.GradientDescentOptimizer(self.learning_rate).\
-        #     apply_gradients(zip(self.variance_grads, self.variance_params))
-        #
-        # # collection contains all the variance parameters
-        # # since we take the reciprocal of a here, we need to add a small value to a since a can be zero sometime.
-        #
-        # inverse_var_params = [1/a for a in self.variance_params]
-        # self.natural_grads = [tf.multiply(a, b) for a, b in zip(inverse_var_params,self.mean_grads)]
-        # self.optimize = tf.train.GradientDescentOptimizer(self.learning_rate).\
-        #     apply_gradients(zip(self.natural_grads, self.mean_params))
         self.num_trainable_vars = len(self.mean_params) + len(self.variance_params) + \
                                   len(self.target_network_params) + len(self.test_network_params)
-
-
-    def create_actor_network(self):
-        inputs = tflearn.input_data(shape=[None, self.s_dim])
-        net = tflearn.fully_connected(inputs, 400, activation='relu')
-        net = tflearn.fully_connected(net, 300, activation='relu')
-        # Final layer weights are init to Uniform[-3e-3, 3e-3]
-        w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
-        out = tflearn.fully_connected(
-            net, self.a_dim, activation='tanh', weights_init=w_init)
-        # Scale output to -action_bound to action_bound
-        scaled_out = tf.multiply(out, self.action_bound)
-        return inputs, out, scaled_out
 
 
     def creat_actor_network_cvi(self, scope, target = False):
@@ -196,10 +154,6 @@ class ActorNetwork(object):
                                  initializer=sigma_initializer,collections=[scope+'_sigma', tf.GraphKeys.GLOBAL_VARIABLES])
                     noisy_b = b + eps_b * (1/tf.sqrt(sigma_b))
 
-                    # noisy_w = w
-                    # noisy_b = b
-                    # assert noisy_w == w
-                    # assert noisy_b == b
                     if output_layer:
                         layer_output = tf.nn.tanh(tf.matmul(input, noisy_w) + noisy_b)
                     else:
@@ -229,18 +183,23 @@ class ActorNetwork(object):
 
         assert len(grad) == len(sigma)
 
-        variance_grads = [tf.square(grad[i]) for i in range(len(grad))]
+        # variance_grads = [tf.square(grad[i]) for i in range(len(grad))]
+        #
+        # # beta is lambda_1
+        # update_sigma = [sigma[i].assign(sigma[i] + self.beta * variance_grads[i] ) for i in range(len(sigma))]
+        #
+        s_square = [tf.square(sigma[i]) for i in range(len(sigma))]
 
         # beta is lambda_1
-        update_sigma = [sigma[i].assign(sigma[i] + self.beta * variance_grads[i] ) for i in range(len(sigma))]
+        update_sigma = [sigma[i].assign(sigma[i] - self.beta * s_square[i] * grad[i] ) for i in range(len(sigma))]
 
         return update_sigma
 
     def cvi_update_mean(self, grad, var, sigma):
 
-        a = self.sess.run(sigma[0])
+        #a = self.sess.run(sigma[0])
 
-        assert np.min(a) >= self.noise
+        #assert np.min(a) >= self.noise
 
         assert len(grad) == len(var)
 
@@ -260,23 +219,11 @@ class ActorNetwork(object):
                 self.inputs: inputs,
                 self.action_gradient: a_gradient
             })
-            #a = self.sess.run(self.mean_params[0])
 
         self.sess.run(self.optimize, feed_dict={
             self.inputs: inputs,
             self.action_gradient: a_gradient
         })
-
-        # b = self.sess.run(self.mean_params[0])
-        #
-        # c = self.sess.run(self.check_grad[0])
-        #
-        # print(a[:,:10])
-        # print(b[:,:10])
-        # print(c[:,:10])
-        # print(a - b - self.learning_rate*c)
-        #
-        # print('check')
 
 
     def predict(self, inputs):
