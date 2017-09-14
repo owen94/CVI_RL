@@ -69,7 +69,7 @@ def main(_):
     method_dict = {-2 : "ADAM", 
                    -1 : "SGD", 
                     0 : "NOISE+CVI",
-                    1 : "NOISE+CVI_diag",
+                    1 : "NOISE+CVI_first",
                     2 : "NOISE+SGD",
                     3 : "NOISE+ADAM",
                     4 : "NOISE+SGD+CONS"
